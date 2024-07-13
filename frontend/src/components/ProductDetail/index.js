@@ -1,0 +1,384 @@
+import classNames from 'classnames/bind';
+import styles from './ProductDetail.module.scss';
+import { Col, Row, Image, Rate } from 'antd';
+import { AiOutlineMinus, AiOutlinePlus, AiOutlineShoppingCart } from 'react-icons/ai';
+import { GrFormNext } from 'react-icons/gr';
+import { BsPencil } from 'react-icons/bs';
+import * as ProductService from '~/service/ProductService';
+import chunk from 'lodash/chunk';
+import { InputNumber } from 'antd';
+import Button from '../Button';
+import { useQuery } from 'react-query';
+import Loading from '../LoadingComponent';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { addOrderProduct } from '~/redux/slides/orderSlide';
+import { convertPrice } from '~/ultil';
+import IntroduceProduct from '../IntroduceProduct';
+import { useMutationHooks } from '~/hooks/useMutationHook';
+import * as CommentService from '~/service/CommentService';
+import ModalComponent from '~/pages/Admin/ComponentAdmin/ModalComponent';
+import { useEffect } from 'react';
+import { useMemo } from 'react';
+import { WrapperRate, WrapperRate1 } from './style';
+
+const cx = classNames.bind(styles);
+function ProductDetail({ idProduct }) {
+    const [numProduct, setNumProduct] = useState(1);
+
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+    const onChange = (value) => {
+        setNumProduct(Number(value));
+    };
+    const user = useSelector((state) => state.user);
+    const handleChangeCount = (type) => {
+        if (type === 'increase') {
+            setNumProduct(numProduct + 1);
+        } else {
+            if (numProduct <= 1) {
+                setNumProduct(1);
+            } else {
+                setNumProduct(numProduct - 1);
+            }
+        }
+    };
+
+    const handleAddProductCartBuy = () => {
+        dispatch(
+            addOrderProduct({
+                orderItem: {
+                    name: productDetails?.name,
+                    amount: numProduct,
+                    image: productDetails?.image,
+                    discount: productDetails?.discount,
+                    price: productDetails?.price,
+                    pricesale: productDetails?.pricesale,
+                    product: productDetails?._id,
+                    countInStock: productDetails?.countInStock,
+                },
+            }),
+        );
+        navigate('/cart');
+    };
+    const handleAddProductCart = () => {
+        dispatch(
+            addOrderProduct({
+                orderItem: {
+                    name: productDetails?.name,
+                    amount: numProduct,
+                    image: productDetails?.image,
+                    discount: productDetails?.discount,
+                    price: productDetails?.price,
+                    pricesale: productDetails?.pricesale,
+                    product: productDetails?._id,
+                    countInStock: productDetails?.countInStock,
+                },
+            }),
+        );
+    };
+
+    const fetchGetDetailsProduct = async (context) => {
+        const id = context?.queryKey && context?.queryKey[1];
+        if (id) {
+            const res = await ProductService.getDetailProduct(id);
+            return res.data;
+        }
+    };
+    const { isLoading, data: productDetails } = useQuery(['product-details', idProduct], fetchGetDetailsProduct, {
+        enabled: !!idProduct,
+    });
+    const priceSale = Math.trunc(productDetails?.price - (productDetails?.price * productDetails?.discount) / 100);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const [comment, setStateComment] = useState('');
+    const handleOnChangeComment = (e) => {
+        setStateComment(e.target.value);
+    };
+    const mutationAddComment = useMutationHooks((data) => {
+        const { token, ...rest } = data;
+        const res = CommentService.createComment({ ...rest }, token);
+        return res;
+    });
+
+    const handleAddComment = () => {
+        if (user?.access_token && user?.id && user?.name && comment && productDetails?._id) {
+            mutationAddComment.mutate(
+                {
+                    token: user?.access_token,
+                    user: user?.id,
+                    userName: user?.name,
+                    comment: comment,
+                    rating: rateValue,
+                    product: productDetails?._id,
+                },
+                {
+                    onSettled: () => {
+                        queryComment.refetch();
+                    },
+                },
+            );
+        }
+        handleCancel();
+    };
+    const { data: dataAddComment, isSuccess: isSuccessComment } = mutationAddComment;
+
+    useEffect(() => {
+        if (isSuccessComment && dataAddComment?.status === 'OK') {
+            setIsModalOpen(false);
+        }
+    }, [isSuccessComment]);
+    const handleOpenModal = () => {
+        setIsModalOpen(true);
+    };
+
+    const handleCancel = () => {
+        setIsModalOpen(false);
+        setStateComment('');
+        setRateValue(5);
+    };
+
+    const fetchMyOrder = async (context) => {
+        const id = context?.queryKey && context?.queryKey[1];
+        if (id) {
+            const res = await CommentService.getDetailCommentProduct(id);
+            return res.data;
+        }
+    };
+
+    const queryComment = useQuery(['comment', idProduct], fetchMyOrder, {
+        enabled: !!idProduct,
+    });
+    const { data: dataComment } = queryComment;
+    const [rateValue, setRateValue] = useState(5);
+    const handleRate = (value) => {
+        setRateValue(value);
+    };
+
+    const pagination = chunk(dataComment, 7);
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    const rateMemo = useMemo(() => {
+        const totalRate = dataComment?.reduce((total, curr) => {
+            return total + curr?.rating / dataComment?.length;
+        }, 0);
+        return totalRate;
+    }, [dataComment]);
+
+    const [loadMore, setLoadMore] = useState(false);
+
+    return (
+        <Loading isLoading={isLoading}>
+            <div className={cx('title')}>
+                Trang chủ <GrFormNext />
+                <span className={cx('title-type')}>{productDetails?.type}</span>
+            </div>
+            <div className={cx('wrapper')}>
+                <div className={cx('product-inner')}>
+                    <div className={cx('product')}>
+                        <div className={'list-img'}>
+                            <Row>
+                                <Image.PreviewGroup
+                                    preview={{
+                                        onChange: (current, prev) => console.log(`current index: ${current}, prev index: ${prev}`),
+                                    }}
+                                >
+                                    <Col span={4} className={cx('img-small')}>
+                                        <Image height={80} width={70} src={productDetails?.image} alt="" className={cx('img-product')} />
+                                    </Col>
+                                    <Col span={10}>
+                                        <Image width={400} src={productDetails?.image} alt="" className={cx('')} />
+                                    </Col>
+                                </Image.PreviewGroup>
+                            </Row>
+                        </div>
+
+                        <div className={cx('product-info')}>
+                            <span className={cx('name-product')}>{productDetails?.name}</span>
+                            <div className={cx('product-right')}>
+                                <div className={cx('company')}>
+                                    <span className={cx('company-home')}>
+                                        Nhà cung cấp:<span className={cx('company-home-text')}> {productDetails?.supplier}</span>
+                                    </span>
+                                    {/* <span className={cx('company-name')}>
+                                        Nhà <span className={cx('do-author-text')}> Kim Đồng</span>
+                                    </span> */}
+                                </div>
+                                <div className={cx('do')}>
+                                    <span className={cx('do-author')}>
+                                        Loại thiết bị:
+                                        <span className={cx('do-author-text')}> {productDetails?.type}</span>
+                                    </span>
+                                    <span className={cx('do-type')}>
+                                        Hình thức: <span className={cx('do-author-text')}>Thiết bị nông nghiệp</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div className={cx('star')}>
+                                <Rate disabled value={productDetails?.rating} allowHalf />
+                            </div>
+                            <div className={cx('price')}>
+                                <div className={cx('price-sale')}>{convertPrice(priceSale)}</div>
+                                {productDetails?.discount !== 0 && <div className={cx('price-current')}>{convertPrice(productDetails?.price)}</div>}
+                                {productDetails?.discount !== 0 && <span className={cx('sale')}>-{productDetails?.discount}%</span>}
+                            </div>
+                            <div className={cx('delivery')}>
+                                <div className={cx('time-delivery')}> Thời gian giao hàng</div>
+                                <div className={cx('delivery-info')}>
+                                    <div className={cx('place-delivery')}>
+                                        Giao hàng đến: <span className={cx('place-delivery-text')}> Từ sơn - Bắc Ninh</span>
+                                        <span className={cx('place-delivery-change')}> Thay đổi</span>
+                                    </div>
+                                    <div className={cx('expected-delivery')}>
+                                        Dự kiến giao:<span className={cx('place-delivery-text')}> Thứ 2 - 30/7</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={cx('amount')}>
+                                <span className={cx('amount-text')}>Số lượng</span>
+                                <div className={cx('amount-so')}>
+                                    <AiOutlineMinus className={cx('btn-less')} onClick={() => handleChangeCount('decrease')} />
+                                    <InputNumber min={1} className={cx('input-amount')} onChange={onChange} defaultValue={numProduct} value={numProduct} />
+                                    <AiOutlinePlus className={cx('btn-more')} onClick={() => handleChangeCount('increase')} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className={cx('btn-buy')}>
+                        <Button className={cx('btn-buy-cart')} register leftIcon={<AiOutlineShoppingCart className={cx('btn-icon-cart')} />} onClick={handleAddProductCart}>
+                            Thêm vào giỏ hàng
+                        </Button>
+                        <Button className={cx('btn-buy-cart')} login onClick={handleAddProductCartBuy}>
+                            Mua ngay
+                        </Button>
+                    </div>
+                </div>
+
+                <div className={cx('prd-list')}>
+                    <IntroduceProduct />
+                </div>
+
+                <div className={cx('product-information')}>
+                    <h2>Thông tin thiết bị</h2>
+                    <div>
+                        <div className={cx('information')}>
+                            <p className={cx('information_left')}>Mã thiết bị</p>
+                            <p>17082001</p>
+                        </div>
+                        <div className={cx('information')}>
+                            <p className={cx('information_left')}>Tên thiết bị</p>
+                            <p>{productDetails?.name}</p>
+                        </div>
+                        <div className={cx('information')}>
+                            <p className={cx('information_left')}>Loại thiết bị</p>
+                            <p>{productDetails?.type}</p>
+                        </div>
+                        <div className={cx('information')}>
+                            <p className={cx('information_left')}>Tên nhà cung cấp</p>
+                            <p>{productDetails?.supplier}</p>
+
+                        </div>
+                        <div className={cx('node')}>
+                            <p>
+                                Giá thiết bị trên Nasa.com đã bao gồm thuế theo luật hiện hành. Bên cạnh đó, tuỳ vào loại thiết bị, hình thức và địa chỉ giao hàng mà có thể phát
+                                sinh thêm chi phí khác như Phụ phí đóng gói, phí vận chuyển, phụ phí hàng cồng kềnh,...
+                            </p>
+                            <p className={cx('red')}>Chính sách khuyến mãi trên Nasa.com không áp dụng cho Hệ thống Thiết bị Nasa trên toàn quốc</p>
+                        </div>
+                        <div className={cx('description')}>
+                            <h3>Mô tả nội dung:</h3>
+                            <p className={cx(`${cx('description-text')} ${loadMore ? cx('description-less') : ''}`)}>{productDetails?.description}</p>
+                        </div>
+                        <div className={cx('more-des-op')}>
+                            {!loadMore ? (
+                                <Button register className={cx('more-des')} onClick={() => setLoadMore(true)}>
+                                    Xem thêm
+                                </Button>
+                            ) : (
+                                <Button register className={cx('more-des')} onClick={() => setLoadMore(false)}>
+                                    Rút ngọn
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className={cx('product-review')}>
+                    <div className={cx('add-comment')}>
+                        <h2 className={cx('product-review-title')}>Đánh giá thiết bị</h2>
+                        <div className={cx('rate-comment')}>
+                            <div>
+                                <span className={cx('rate-text')}>{rateMemo?.toFixed(1)}</span>
+                                <span className={cx('rate-text-5')}>/5</span>
+                                <div>
+                                    <WrapperRate disabled value={rateMemo?.toFixed(1)} allowHalf />
+                                </div>
+                                <div className={cx('rate-text-total')}>( {dataComment?.length} đáng giá)</div>
+                            </div>
+                            <div>
+                                <Button register onClick={() => handleOpenModal()} className={cx('btn-write')}>
+                                    <BsPencil /> Viết đánh giá
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className={cx('comment')}>
+                        {pagination[currentIndex]?.map((item) => {
+                            return (
+                                <div key={item?._id}>
+                                    <div className={cx('list-comment')}>
+                                        <div className={cx('comment-name-date')}>
+                                            <div className={cx('comment-name')}>{item?.userName}</div>
+                                            <div className={cx('comment-date')}>{item?.createdAt?.split('T')[0]}</div>
+                                        </div>
+                                        <div className={cx('comment-rate')}>
+                                            <WrapperRate disabled value={item?.rating} />
+                                            <span className={cx('comment-text')}>{item?.comment}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div>
+                        <ul className={cx('list-pagination')}>
+                            {pagination?.map((item, index) => {
+                                return (
+                                    <li key={index} onClick={() => setCurrentIndex(index)} className={`${cx('pagination')} ${index === currentIndex ? cx('active') : ''}`}>
+                                        {index + 1}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <ModalComponent title="" open={isModalOpen} onCancel={handleCancel} footer={null} width="64%">
+                <div className={cx('title-comment')}>VIẾT ĐÁNH GIÁ SẢN PHẨM</div>
+                <div className={cx('rate-star')}>
+                    <WrapperRate1 value={rateValue} onChange={handleRate} defaultValue={rateValue} />
+                </div>
+                <textarea
+                    className={cx('textarea-product')}
+                    cols={95}
+                    rows={5}
+                    placeholder="nhập nhận xét của bạn về thiết bị ..."
+                    value={comment}
+                    onChange={handleOnChangeComment}
+                ></textarea>
+                <div className={cx('btn-comment')}>
+                    <span onClick={() => setIsModalOpen(false)} className={cx('close-model')}>
+                        Hủy
+                    </span>
+                    <Button login onClick={handleAddComment}>
+                        Gửi nhận xét
+                    </Button>
+                </div>
+            </ModalComponent>
+        </Loading>
+    );
+}
+
+export default ProductDetail;
